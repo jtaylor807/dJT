@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dJT Voice Command Prototype</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero">
+      <p class="eyebrow">dJT v0.2.0</p>
+      <h1>Voice Command Prototype</h1>
+      <p class="subtitle">Tap the button, speak a DJ command, and inspect the structured action.</p>
+    </section>
+
+    <section class="voice-panel" aria-labelledby="voice-title">
+      <h2 id="voice-title">Voice Control</h2>
+      <button id="talkButton" class="talk-button" type="button">Tap to Talk</button>
+      <p id="supportMessage" class="support-message">Checking voice support…</p>
+      <p id="statusText" class="status-text">Idle</p>
+    </section>
+
+    <section class="result-grid">
+      <article class="card">
+        <h2>Heard</h2>
+        <p id="transcriptText" class="transcript">Nothing yet.</p>
+      </article>
+
+      <article class="card">
+        <h2>Structured Action</h2>
+        <pre id="actionOutput" class="output">{}</pre>
+      </article>
+    </section>
+
+    <section class="debug-panel" aria-labelledby="debug-title">
+      <h2 id="debug-title">Debug Typing Fallback</h2>
+      <p>This is only for parser testing when voice is unavailable.</p>
+      <form id="debugForm" class="debug-form">
+        <input id="debugInput" type="text" placeholder="Example: test a DJ command" autocomplete="off" />
+        <button type="submit">Parse</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
