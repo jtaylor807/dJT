@@ -1,5 +1,10 @@
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const AI_REVIEW_QUEUE_KEY = 'djt_ai_review_queue';
+const SPOTIFY_CLIENT_ID_KEY = 'djt_spotify_client_id';
+const SPOTIFY_CODE_VERIFIER_KEY = 'djt_spotify_code_verifier';
+const SPOTIFY_ACCESS_TOKEN_KEY = 'djt_spotify_access_token';
+const SPOTIFY_TOKEN_EXPIRES_AT_KEY = 'djt_spotify_token_expires_at';
+const SPOTIFY_SCOPES = 'user-read-playback-state user-modify-playback-state';
 
 const talkButton = document.getElementById('talkButton');
 const supportMessage = document.getElementById('supportMessage');
@@ -10,12 +15,18 @@ const debugForm = document.getElementById('debugForm');
 const debugInput = document.getElementById('debugInput');
 const reviewQueue = document.getElementById('reviewQueue');
 const clearReviewQueue = document.getElementById('clearReviewQueue');
+const spotifyLoginButton = document.getElementById('spotifyLoginButton');
+const playSavingGraceButton = document.getElementById('playSavingGraceButton');
+const spotifyClientIdInput = document.getElementById('spotifyClientIdInput');
+const spotifyStatusText = document.getElementById('spotifyStatusText');
 
 let recognition = null;
 let isListening = false;
 let lastAction = null;
 
 renderReviewQueue();
+initializeSpotifyUi();
+completeSpotifyLoginIfNeeded();
 
 if (SpeechRecognition) {
   recognition = new SpeechRecognition();
@@ -88,6 +99,33 @@ clearReviewQueue.addEventListener('click', () => {
   renderReviewQueue();
 });
 
+spotifyClientIdInput.addEventListener('input', () => {
+  const clientId = spotifyClientIdInput.value.trim();
+  if (clientId) {
+    localStorage.setItem(SPOTIFY_CLIENT_ID_KEY, clientId);
+    setSpotifyStatus('Spotify Client ID saved. Tap Connect Spotify when ready.');
+  } else {
+    localStorage.removeItem(SPOTIFY_CLIENT_ID_KEY);
+    setSpotifyStatus('Spotify is not connected. Paste a Client ID first.');
+  }
+});
+
+spotifyLoginButton.addEventListener('click', async () => {
+  try {
+    await beginSpotifyLogin();
+  } catch (error) {
+    setSpotifyStatus(`Spotify login error: ${error.message}`);
+  }
+});
+
+playSavingGraceButton.addEventListener('click', async () => {
+  try {
+    await playSavingGrace();
+  } catch (error) {
+    setSpotifyStatus(`Spotify playback error: ${error.message}`);
+  }
+});
+
 function handleCommand(command, source = 'voice') {
   transcriptText.textContent = command || 'Nothing heard.';
   const parsed = parseCommand(command, source);
@@ -106,6 +144,216 @@ function handleCommand(command, source = 'voice') {
 
 function showAction(action) {
   actionOutput.textContent = JSON.stringify(action, null, 2);
+}
+
+function initializeSpotifyUi() {
+  spotifyClientIdInput.value = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY) || '';
+  if (getStoredSpotifyToken()) {
+    setSpotifyStatus('Spotify is connected. Open Spotify on a device, start any song, then tap Play Saving Grace.');
+  } else if (spotifyClientIdInput.value) {
+    setSpotifyStatus('Spotify Client ID saved. Tap Connect Spotify.');
+  } else {
+    setSpotifyStatus('Spotify is not connected. Paste a Spotify app Client ID first.');
+  }
+}
+
+async function beginSpotifyLogin() {
+  const clientId = getSpotifyClientId();
+  const redirectUri = getRedirectUri();
+  const verifier = generateRandomString(64);
+  const challenge = await sha256Base64Url(verifier);
+
+  sessionStorage.setItem(SPOTIFY_CODE_VERIFIER_KEY, verifier);
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'code',
+    redirect_uri: redirectUri,
+    code_challenge_method: 'S256',
+    code_challenge: challenge,
+    scope: SPOTIFY_SCOPES
+  });
+
+  window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+}
+
+async function completeSpotifyLoginIfNeeded() {
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  const error = url.searchParams.get('error');
+
+  if (error) {
+    setSpotifyStatus(`Spotify authorization failed: ${error}`);
+    removeSpotifyQueryParams();
+    return;
+  }
+
+  if (!code) {
+    return;
+  }
+
+  try {
+    const clientId = getSpotifyClientId();
+    const verifier = sessionStorage.getItem(SPOTIFY_CODE_VERIFIER_KEY);
+    if (!verifier) {
+      throw new Error('Missing Spotify login verifier. Try Connect Spotify again.');
+    }
+
+    const body = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: getRedirectUri(),
+      code_verifier: verifier
+    });
+
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error_description || data.error || 'Could not exchange Spotify code.');
+    }
+
+    storeSpotifyToken(data.access_token, data.expires_in);
+    sessionStorage.removeItem(SPOTIFY_CODE_VERIFIER_KEY);
+    removeSpotifyQueryParams();
+    setSpotifyStatus('Spotify connected. Open Spotify on a device, start any song, then tap Play Saving Grace.');
+  } catch (error) {
+    setSpotifyStatus(`Spotify connection error: ${error.message}`);
+  }
+}
+
+async function playSavingGrace() {
+  const token = await requireSpotifyToken();
+  setSpotifyStatus('Searching Spotify for Saving Grace by Tom Petty…');
+
+  const track = await searchSpotifyTrack(token, 'track:"Saving Grace" artist:"Tom Petty"');
+  if (!track) {
+    throw new Error('Could not find Saving Grace by Tom Petty.');
+  }
+
+  setSpotifyStatus(`Found ${track.name} by ${track.artists.map((artist) => artist.name).join(', ')}. Starting playback…`);
+
+  const playResponse = await fetch('https://api.spotify.com/v1/me/player/play', {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ uris: [track.uri] })
+  });
+
+  if (playResponse.status === 204) {
+    setSpotifyStatus('Playing Saving Grace by Tom Petty.');
+    showAction({
+      action: 'spotify_play_track',
+      confidence: 'high',
+      needs_ai: false,
+      track: track.name,
+      artist: track.artists.map((artist) => artist.name).join(', '),
+      uri: track.uri
+    });
+    return;
+  }
+
+  const errorText = await playResponse.text();
+  if (playResponse.status === 404) {
+    throw new Error('No active Spotify device found. Open Spotify on your iPad/iPhone or computer, start any song, then try again.');
+  }
+
+  throw new Error(errorText || `Spotify returned HTTP ${playResponse.status}.`);
+}
+
+async function searchSpotifyTrack(token, query) {
+  const params = new URLSearchParams({ q: query, type: 'track', limit: '5' });
+  const response = await fetch(`https://api.spotify.com/v1/search?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Spotify search failed.');
+  }
+
+  const tracks = data.tracks?.items || [];
+  return tracks.find((track) =>
+    normalize(track.name) === 'saving grace'
+    && track.artists.some((artist) => normalize(artist.name).includes('tom petty'))
+  ) || tracks[0] || null;
+}
+
+async function requireSpotifyToken() {
+  const token = getStoredSpotifyToken();
+  if (token) {
+    return token;
+  }
+
+  throw new Error('Spotify is not connected. Paste your Spotify Client ID and tap Connect Spotify first.');
+}
+
+function getSpotifyClientId() {
+  const clientId = localStorage.getItem(SPOTIFY_CLIENT_ID_KEY) || spotifyClientIdInput.value.trim();
+  if (!clientId) {
+    throw new Error('Missing Spotify Client ID. Create a Spotify app and paste its Client ID here.');
+  }
+  localStorage.setItem(SPOTIFY_CLIENT_ID_KEY, clientId);
+  return clientId;
+}
+
+function getRedirectUri() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function storeSpotifyToken(accessToken, expiresInSeconds) {
+  localStorage.setItem(SPOTIFY_ACCESS_TOKEN_KEY, accessToken);
+  const expiresAt = Date.now() + Math.max(0, expiresInSeconds - 60) * 1000;
+  localStorage.setItem(SPOTIFY_TOKEN_EXPIRES_AT_KEY, String(expiresAt));
+}
+
+function getStoredSpotifyToken() {
+  const token = localStorage.getItem(SPOTIFY_ACCESS_TOKEN_KEY);
+  const expiresAt = Number(localStorage.getItem(SPOTIFY_TOKEN_EXPIRES_AT_KEY) || 0);
+
+  if (!token || !expiresAt || Date.now() >= expiresAt) {
+    localStorage.removeItem(SPOTIFY_ACCESS_TOKEN_KEY);
+    localStorage.removeItem(SPOTIFY_TOKEN_EXPIRES_AT_KEY);
+    return null;
+  }
+
+  return token;
+}
+
+function removeSpotifyQueryParams() {
+  const cleanUrl = `${window.location.origin}${window.location.pathname}${window.location.hash || ''}`;
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+function setSpotifyStatus(message) {
+  spotifyStatusText.textContent = message;
+}
+
+function generateRandomString(length) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const randomValues = new Uint32Array(length);
+  crypto.getRandomValues(randomValues);
+  return Array.from(randomValues, (value) => chars[value % chars.length]).join('');
+}
+
+async function sha256Base64Url(value) {
+  const bytes = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return base64UrlEncode(new Uint8Array(hash));
+}
+
+function base64UrlEncode(bytes) {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 function parseCommand(rawCommand, source = 'voice') {
