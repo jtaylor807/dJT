@@ -1,4 +1,5 @@
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const AI_REVIEW_QUEUE_KEY = 'djt_ai_review_queue';
 
 const talkButton = document.getElementById('talkButton');
 const supportMessage = document.getElementById('supportMessage');
@@ -7,10 +8,14 @@ const transcriptText = document.getElementById('transcriptText');
 const actionOutput = document.getElementById('actionOutput');
 const debugForm = document.getElementById('debugForm');
 const debugInput = document.getElementById('debugInput');
+const reviewQueue = document.getElementById('reviewQueue');
+const clearReviewQueue = document.getElementById('clearReviewQueue');
 
 let recognition = null;
 let isListening = false;
 let lastAction = null;
+
+renderReviewQueue();
 
 if (SpeechRecognition) {
   recognition = new SpeechRecognition();
@@ -24,7 +29,7 @@ if (SpeechRecognition) {
   recognition.addEventListener('start', () => {
     isListening = true;
     talkButton.classList.add('listening');
-    talkButton.textContent = 'Listening…';
+    talkButton.innerHTML = '<span class="mic-symbol">🎙</span><span>Listening…</span>';
     statusText.textContent = 'Listening for a DJ command.';
   });
 
@@ -51,7 +56,7 @@ if (SpeechRecognition) {
   recognition.addEventListener('end', () => {
     isListening = false;
     talkButton.classList.remove('listening');
-    talkButton.textContent = 'Tap to Talk';
+    talkButton.innerHTML = '<span class="mic-symbol">🎙</span><span>Tap to Talk</span>';
     if (statusText.textContent === 'Listening for a DJ command.') {
       statusText.textContent = 'Idle';
     }
@@ -78,13 +83,24 @@ debugForm.addEventListener('submit', (event) => {
   handleCommand(command, 'debug');
 });
 
+clearReviewQueue.addEventListener('click', () => {
+  localStorage.removeItem(AI_REVIEW_QUEUE_KEY);
+  renderReviewQueue();
+});
+
 function handleCommand(command, source = 'voice') {
   transcriptText.textContent = command || 'Nothing heard.';
   const parsed = parseCommand(command, source);
   lastAction = parsed;
+
+  if (parsed.needs_ai) {
+    saveForAiReview(command, source, parsed.reason || 'No confident local match.');
+  }
+
   showAction(parsed);
+  renderReviewQueue();
   statusText.textContent = parsed.needs_ai
-    ? 'Local parser is unsure. AI fallback would be needed later.'
+    ? 'Saved to AI Review Queue for future rule development.'
     : `Parsed locally: ${parsed.action}`;
 }
 
@@ -100,34 +116,133 @@ function parseCommand(rawCommand, source = 'voice') {
     return unknownAction(original, source, 'No command heard.');
   }
 
-  if (matchesAny(command, ['undo', 'undo that', 'cancel that', 'forget that'])) {
+  const correction = parseCorrection(command, source);
+  if (correction) return correction;
+
+  const playback = parsePlayback(command, source);
+  if (playback) return playback;
+
+  const energy = parseEnergy(command, source);
+  if (energy) return energy;
+
+  const playlistAction = parsePlaylistAction(command, source);
+  if (playlistAction) return playlistAction;
+
+  const genreRule = parseGenreRule(command, source);
+  if (genreRule) return genreRule;
+
+  const songRule = parseSongRule(command, source);
+  if (songRule) return songRule;
+
+  const artistRule = parseArtistRule(command, original, source);
+  if (artistRule) return artistRule;
+
+  return unknownAction(original, source, 'No confident local match.');
+}
+
+function parseCorrection(command, source) {
+  if (matchesAny(command, [
+    'undo',
+    'undo that',
+    'cancel that',
+    'forget that',
+    'never mind',
+    'nevermind',
+    'scratch that',
+    'take that back'
+  ])) {
     return buildAction('undo_last_action', { source, previous_action: lastAction?.action || null });
   }
 
-  if (matchesAny(command, ['show rules', 'show my rules', 'what are the rules', 'show blocked artists'])) {
+  if (matchesAny(command, [
+    'show rules',
+    'show my rules',
+    'what are the rules',
+    'show blocked artists',
+    'show blocked songs',
+    'show blocked genres',
+    'what did i block',
+    'what have i blocked'
+  ])) {
     return buildAction('show_rules', { source });
   }
 
-  if (matchesAny(command, ['play', 'start playing', 'resume', 'resume music'])) {
+  return null;
+}
+
+function parsePlayback(command, source) {
+  if (matchesAny(command, [
+    'play',
+    'start playing',
+    'resume',
+    'resume music',
+    'keep playing',
+    'unpause',
+    'continue',
+    'continue playing'
+  ])) {
     return buildAction('play', { source });
   }
 
-  if (matchesAny(command, ['pause', 'pause music', 'stop music'])) {
+  if (matchesAny(command, [
+    'pause',
+    'pause music',
+    'stop music',
+    'hold up',
+    'wait',
+    'stop for a second'
+  ])) {
     return buildAction('pause', { source });
   }
 
-  if (matchesAny(command, ['skip', 'skip this', 'skip this song', 'next', 'next song'])) {
+  if (matchesAny(command, [
+    'skip',
+    'skip this',
+    'skip this song',
+    'next',
+    'next song',
+    'go next',
+    'move on',
+    'not this one',
+    'i do not want this song',
+    'dont want this song'
+  ])) {
     return buildAction('skip_track', { source });
   }
 
-  if (matchesAny(command, ['restart', 'restart song', 'restart this song', 'replay this song', 'start this song over'])) {
+  if (matchesAny(command, [
+    'restart',
+    'restart song',
+    'restart this song',
+    'replay this song',
+    'start this song over',
+    'play this song from the beginning',
+    'play this from the beginning',
+    'start this song from the beginning',
+    'start this over',
+    'play it from the top',
+    'from the beginning',
+    'begin this song again',
+    'run it back',
+    'take it from the top'
+  ])) {
     return buildAction('restart_track', { source });
   }
 
-  if (includesAny(command, ['play this next', 'play it next', 'queue this next'])) {
+  if (includesAny(command, [
+    'play this next',
+    'play it next',
+    'queue this next',
+    'put this next',
+    'make this next'
+  ])) {
     return buildAction('play_next', { source, target: 'current_track' });
   }
 
+  return null;
+}
+
+function parseEnergy(command, source) {
   const energyMatch = command.match(/(?:set|keep|make) (?:the )?energy (?:at|to)?\s*(\d{1,2})/);
   if (energyMatch) {
     return buildAction('set_energy', {
@@ -137,178 +252,204 @@ function parseCommand(rawCommand, source = 'voice') {
     });
   }
 
-  const genrePreference = parseGenrePreference(command);
-  if (genrePreference) {
-    return buildAction('set_genre_preference', { source, ...genrePreference });
-  }
-
-  const playlistAction = parsePlaylistAction(command);
-  if (playlistAction) {
-    return buildAction(playlistAction.action, { source, ...playlistAction.details });
-  }
-
-  const artistRule = parseArtistRule(command, original);
-  if (artistRule) {
-    return buildAction(artistRule.action, { source, ...artistRule.details });
-  }
-
-  const songRule = parseSongRule(command);
-  if (songRule) {
-    return buildAction(songRule.action, { source, ...songRule.details });
-  }
-
-  return unknownAction(original, source, 'No confident local match.');
+  return null;
 }
 
-function parseArtistRule(command, original) {
+function parsePlaylistAction(command, source) {
+  if (includesAny(command, [
+    'add this song to my playlist',
+    'save this song',
+    'add this song',
+    'favorite this song',
+    'like this song',
+    'put this song in my playlist'
+  ])) {
+    return buildAction('add_current_song_to_playlist', { source, target: 'current_track' });
+  }
+
+  const artistMatch = command.match(/add (?<artist>.+?) to (?:my )?playlist/);
+  if (artistMatch?.groups?.artist && !artistMatch.groups.artist.includes('this song')) {
+    return buildAction('add_artist_to_playlist', {
+      source,
+      artist: cleanEntity(artistMatch.groups.artist)
+    });
+  }
+
+  return null;
+}
+
+function parseGenreRule(command, source) {
+  const duration = parseDuration(command);
+  const negativeGenre = command.match(/(?:do not|dont|don't|no|never|stop|avoid|block|ban|enough|done with|switch away from|lose) (?:play |playing |any more |more )?(?<genre>[a-z0-9 '&-]+?)(?: music| songs| tonight| for |$)/);
+
+  if (negativeGenre?.groups?.genre && isLikelyGenre(negativeGenre.groups.genre)) {
+    return buildAction('block_genre', {
+      source,
+      genre: cleanEntity(negativeGenre.groups.genre),
+      duration_days: duration.days,
+      duration_label: duration.label,
+      expires: duration.expires
+    });
+  }
+
+  const noMoreGenre = command.match(/(?:no more|dont play any more|don't play any more|do not play any more|stop playing|enough) (?<genre>[a-z0-9 '&-]+?)(?: music| songs| tonight|$)/);
+  if (noMoreGenre?.groups?.genre) {
+    return buildAction('block_genre', {
+      source,
+      genre: cleanEntity(noMoreGenre.groups.genre),
+      duration_days: duration.days,
+      duration_label: duration.label,
+      expires: duration.expires
+    });
+  }
+
+  const moreMatch = command.match(/(?:play more|more|give me more) (?<genre>[a-z0-9 '&-]+?)(?: music| songs| tonight| for |$)/);
+  if (moreMatch?.groups?.genre && isLikelyGenre(moreMatch.groups.genre)) {
+    return buildAction('set_genre_preference', {
+      source,
+      genre: cleanEntity(moreMatch.groups.genre),
+      preference: 'more',
+      weight: 1,
+      duration_label: duration.label
+    });
+  }
+
+  const lessMatch = command.match(/(?:play less|less|dial back|cut back on) (?<genre>[a-z0-9 '&-]+?)(?: music| songs| tonight| for |$)/);
+  if (lessMatch?.groups?.genre && isLikelyGenre(lessMatch.groups.genre)) {
+    return buildAction('set_genre_preference', {
+      source,
+      genre: cleanEntity(lessMatch.groups.genre),
+      preference: 'less',
+      weight: -1,
+      duration_label: duration.label
+    });
+  }
+
+  return null;
+}
+
+function parseSongRule(command, source) {
+  if (includesAny(command, [
+    'do not play this song',
+    'dont play this song',
+    "don't play this song",
+    'never play this song',
+    'block this song',
+    'ban this song',
+    'avoid this song',
+    'no more of this song'
+  ])) {
+    const duration = parseDuration(command);
+    return buildAction('block_song', {
+      source,
+      target: 'current_track',
+      duration_days: duration.days,
+      duration_label: duration.label,
+      expires: duration.expires
+    });
+  }
+
+  if (includesAny(command, [
+    'play this song more',
+    'favor this song',
+    'more of this song',
+    'keep this song around',
+    'play this one more often'
+  ])) {
+    return buildAction('favor_song', {
+      source,
+      target: 'current_track',
+      duration_label: command.includes('tonight') ? 'tonight' : 'session',
+      weight: 2
+    });
+  }
+
+  return null;
+}
+
+function parseArtistRule(command, original, source) {
   const duration = parseDuration(command);
 
+  const playForDurationMatch = command.match(/^play (?<artist>.+?) for (?:the )?next (?<amount>\d+|one|two|three|four|five|six|seven|eight|nine|ten) (?<unit>hour|hours|day|days)$/);
+  if (playForDurationMatch?.groups?.artist) {
+    const parsedDuration = parseDuration(`for ${wordToNumber(playForDurationMatch.groups.amount)} ${playForDurationMatch.groups.unit}`);
+    return buildAction('favor_artist', {
+      source,
+      artist: cleanEntity(playForDurationMatch.groups.artist),
+      duration_days: parsedDuration.days,
+      duration_label: parsedDuration.label,
+      expires: parsedDuration.expires,
+      weight: 2
+    });
+  }
+
   const blockPatterns = [
-    /(?:do not|dont|never|no|block|ban|avoid) play (?<artist>.+?)(?: for | tonight| until | permanently|$)/,
-    /(?:do not|dont|never|no|block|ban|avoid) (?<artist>.+?)(?: for | tonight| until | permanently|$)/,
+    /(?:do not|dont|don't|never|no|block|ban|avoid) play (?<artist>.+?)(?: for | tonight| until | permanently|$)/,
+    /(?:do not|dont|don't|never|no|block|ban|avoid) (?<artist>.+?)(?: for | tonight| until | permanently|$)/,
     /(?:delete you|fired|done with you).+ if you play (?<artist>.+?)(?: again|$)/
   ];
 
   for (const pattern of blockPatterns) {
     const artist = extractNamedMatch(command, pattern, 'artist');
-    if (artist && !artist.includes('this song')) {
-      return {
-        action: 'block_artist',
-        details: {
-          artist: cleanEntity(artist),
-          duration_days: duration.days,
-          duration_label: duration.label,
-          expires: duration.expires
-        }
-      };
+    if (artist && !artist.includes('this song') && !isLikelyGenre(artist)) {
+      return buildAction('block_artist', {
+        source,
+        artist: cleanEntity(artist),
+        duration_days: duration.days,
+        duration_label: duration.label,
+        expires: duration.expires
+      });
     }
   }
 
   const favorPatterns = [
-    /(?:play more|more|favor|increase) (?<artist>.+?)(?: tonight| for |$)/,
+    /(?:play more|more|favor|increase|give me more) (?<artist>.+?)(?: tonight| for |$)/,
     /play (?<artist>.+?) every (?<frequency>other|\d+) song(?:s)?(?: tonight|$)/,
     /if you do not play (?<artist>.+?) every (?<frequency>other|\d+) song(?:s)?(?: tonight|$)/
   ];
 
   for (const pattern of favorPatterns) {
     const match = command.match(pattern);
-    if (match?.groups?.artist) {
-      return {
-        action: 'favor_artist',
-        details: {
-          artist: cleanEntity(match.groups.artist),
-          duration_label: duration.label || (command.includes('tonight') ? 'tonight' : 'session'),
-          frequency: match.groups.frequency ? normalizeFrequency(match.groups.frequency) : null,
-          weight: 2
-        }
-      };
+    if (match?.groups?.artist && !isLikelyGenre(match.groups.artist)) {
+      return buildAction('favor_artist', {
+        source,
+        artist: cleanEntity(match.groups.artist),
+        duration_label: duration.label || (command.includes('tonight') ? 'tonight' : 'session'),
+        frequency: match.groups.frequency ? normalizeFrequency(match.groups.frequency) : null,
+        weight: 2
+      });
     }
   }
 
   const reducePatterns = [
-    /(?:play less|less|reduce) (?<artist>.+?)(?: tonight| for |$)/
+    /(?:play less|less|reduce|dial back|cut back on) (?<artist>.+?)(?: tonight| for |$)/
   ];
 
   for (const pattern of reducePatterns) {
     const artist = extractNamedMatch(command, pattern, 'artist');
-    if (artist) {
-      return {
-        action: 'reduce_artist',
-        details: {
-          artist: cleanEntity(artist),
-          duration_label: duration.label || (command.includes('tonight') ? 'tonight' : 'session'),
-          weight: -1
-        }
-      };
+    if (artist && !isLikelyGenre(artist)) {
+      return buildAction('reduce_artist', {
+        source,
+        artist: cleanEntity(artist),
+        duration_label: duration.label || (command.includes('tonight') ? 'tonight' : 'session'),
+        weight: -1
+      });
     }
   }
 
   if (/delete you|fired|done with you/.test(command) && /play/.test(command)) {
-    return {
-      action: 'needs_ai_interpretation',
-      details: {
-        raw_command: original,
-        reason: 'Threat or consequence phrasing involving playback is ambiguous.'
-      }
-    };
-  }
-
-  return null;
-}
-
-function parseSongRule(command) {
-  if (includesAny(command, ['do not play this song', 'dont play this song', 'never play this song', 'block this song'])) {
-    const duration = parseDuration(command);
-    return {
-      action: 'block_song',
-      details: {
-        target: 'current_track',
-        duration_days: duration.days,
-        duration_label: duration.label,
-        expires: duration.expires
-      }
-    };
-  }
-
-  if (includesAny(command, ['play this song more', 'favor this song', 'more of this song'])) {
-    return {
-      action: 'favor_song',
-      details: {
-        target: 'current_track',
-        duration_label: command.includes('tonight') ? 'tonight' : 'session',
-        weight: 2
-      }
-    };
-  }
-
-  return null;
-}
-
-function parsePlaylistAction(command) {
-  if (includesAny(command, ['add this song to my playlist', 'save this song', 'add this song'])) {
-    return {
-      action: 'add_current_song_to_playlist',
-      details: { target: 'current_track' }
-    };
-  }
-
-  const artistMatch = command.match(/add (?<artist>.+?) to (?:my )?playlist/);
-  if (artistMatch?.groups?.artist && !artistMatch.groups.artist.includes('this song')) {
-    return {
-      action: 'add_artist_to_playlist',
-      details: { artist: cleanEntity(artistMatch.groups.artist) }
-    };
-  }
-
-  return null;
-}
-
-function parseGenrePreference(command) {
-  const moreMatch = command.match(/(?:play more|more) (?<genre>[a-z0-9 '&-]+?)(?: music| songs|$)/);
-  if (moreMatch?.groups?.genre) {
-    return {
-      genre: cleanEntity(moreMatch.groups.genre),
-      preference: 'more',
-      weight: 1,
-      duration: command.includes('tonight') ? 'tonight' : 'session'
-    };
-  }
-
-  const lessMatch = command.match(/(?:play less|less) (?<genre>[a-z0-9 '&-]+?)(?: music| songs|$)/);
-  if (lessMatch?.groups?.genre) {
-    return {
-      genre: cleanEntity(lessMatch.groups.genre),
-      preference: 'less',
-      weight: -1,
-      duration: command.includes('tonight') ? 'tonight' : 'session'
-    };
+    return buildAction('needs_ai_interpretation', {
+      source,
+      raw_command: original,
+      reason: 'Threat or consequence phrasing involving playback is ambiguous.'
+    });
   }
 
   return null;
 }
 
 function parseDuration(command) {
-  if (command.includes('permanently') || command.includes('forever') || command.includes('never')) {
+  if (command.includes('permanently') || command.includes('forever')) {
     return { label: 'permanent', days: null, expires: null };
   }
 
@@ -316,12 +457,18 @@ function parseDuration(command) {
     return { label: command.includes('this party') ? 'this_party' : 'tonight', days: 0, expires: 'session_end' };
   }
 
-  if (command.includes('a week') || command.includes('one week') || command.includes('seven days')) {
+  if (command.includes('a week') || command.includes('one week') || command.includes('seven days') || command.includes('next seven days') || command.includes('the next seven days')) {
     return { label: '7 days', days: 7, expires: daysFromNow(7) };
   }
 
   if (command.includes('quarter of a month')) {
     return { label: '7 days', days: 7, expires: daysFromNow(7) };
+  }
+
+  const nextDayMatch = command.match(/(?:for )?(?:the )?next (\d+) day/);
+  if (nextDayMatch) {
+    const days = Number(nextDayMatch[1]);
+    return { label: `${days} days`, days, expires: daysFromNow(days) };
   }
 
   const dayMatch = command.match(/for (\d+) day/);
@@ -330,10 +477,16 @@ function parseDuration(command) {
     return { label: `${days} days`, days, expires: daysFromNow(days) };
   }
 
+  const nextHourMatch = command.match(/(?:for )?(?:the )?next (\d+) hour/);
+  if (nextHourMatch) {
+    const hours = Number(nextHourMatch[1]);
+    return { label: `${hours} hour${hours === 1 ? '' : 's'}`, days: hours / 24, expires: hoursFromNow(hours) };
+  }
+
   const hourMatch = command.match(/for (\d+) hour/);
   if (hourMatch) {
     const hours = Number(hourMatch[1]);
-    return { label: `${hours} hours`, days: hours / 24, expires: hoursFromNow(hours) };
+    return { label: `${hours} hour${hours === 1 ? '' : 's'}`, days: hours / 24, expires: hoursFromNow(hours) };
   }
 
   return { label: 'session', days: 0, expires: 'session_end' };
@@ -359,6 +512,46 @@ function unknownAction(rawCommand, source, reason) {
   };
 }
 
+function saveForAiReview(command, source, reason) {
+  if (!command.trim()) return;
+
+  const queue = getReviewQueue();
+  queue.unshift({
+    phrase: command.trim(),
+    source,
+    reason,
+    captured_at: new Date().toISOString()
+  });
+
+  localStorage.setItem(AI_REVIEW_QUEUE_KEY, JSON.stringify(queue.slice(0, 25)));
+}
+
+function getReviewQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(AI_REVIEW_QUEUE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function renderReviewQueue() {
+  const queue = getReviewQueue();
+
+  if (!queue.length) {
+    reviewQueue.textContent = 'No AI-needed phrases captured yet.';
+    return;
+  }
+
+  reviewQueue.innerHTML = queue
+    .map((item) => `
+      <div class="review-item">
+        <strong>${escapeHtml(item.phrase)}</strong>
+        <div class="review-meta">${escapeHtml(item.reason)} • ${escapeHtml(item.source)} • ${new Date(item.captured_at).toLocaleString()}</div>
+      </div>
+    `)
+    .join('');
+}
+
 function normalize(value) {
   return value
     .toLowerCase()
@@ -368,11 +561,11 @@ function normalize(value) {
 }
 
 function matchesAny(value, options) {
-  return options.some((option) => value === option);
+  return options.some((option) => value === normalize(option));
 }
 
 function includesAny(value, options) {
-  return options.some((option) => value.includes(option));
+  return options.some((option) => value.includes(normalize(option)));
 }
 
 function extractNamedMatch(value, pattern, groupName) {
@@ -382,7 +575,7 @@ function extractNamedMatch(value, pattern, groupName) {
 
 function cleanEntity(value) {
   return value
-    .replace(/\b(for|tonight|until|permanently|again|please)\b.*$/g, '')
+    .replace(/\b(for|the next|next|tonight|until|permanently|again|please)\b.*$/g, '')
     .replace(/\bby\b/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -394,6 +587,51 @@ function normalizeFrequency(value) {
     return 'every_other_song';
   }
   return `every_${value}_songs`;
+}
+
+function isLikelyGenre(value) {
+  const genre = normalize(value);
+  return [
+    'country',
+    'pop',
+    'rock',
+    'rap',
+    'hip hop',
+    'hip-hop',
+    'r&b',
+    'rb',
+    'dance',
+    'edm',
+    'metal',
+    'jazz',
+    'blues',
+    'folk',
+    'latin',
+    'classical',
+    'oldies',
+    'disco',
+    'punk',
+    'reggae',
+    'christmas',
+    'holiday'
+  ].includes(genre);
+}
+
+function wordToNumber(value) {
+  const numbers = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10
+  };
+
+  return numbers[value] || Number(value);
 }
 
 function daysFromNow(days) {
@@ -410,4 +648,13 @@ function hoursFromNow(hours) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
