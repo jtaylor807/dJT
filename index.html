@@ -21,7 +21,7 @@
       <div class="brand-lockup" aria-label="dJT">
         <img class="brand-icon" src="icon.svg" alt="" />
         <div>
-          <p class="eyebrow">dJT v0.2.1</p>
+          <p class="eyebrow">dJT v0.3.0</p>
           <h1><span class="brand-d">d</span>JT</h1>
         </div>
       </div>
@@ -36,6 +36,20 @@
       </button>
       <p id="supportMessage" class="support-message">Checking voice support…</p>
       <p id="statusText" class="status-text">Idle</p>
+    </section>
+
+    <section class="spotify-panel" aria-labelledby="spotify-title">
+      <h2 id="spotify-title">Spotify Test</h2>
+      <p>Connect Spotify, then play “Saving Grace” by Tom Petty on your active Spotify device.</p>
+      <div class="spotify-controls">
+        <button id="spotifyLoginButton" type="button">Connect Spotify</button>
+        <button id="playSavingGraceButton" type="button">Play Saving Grace</button>
+      </div>
+      <label class="client-id-field" for="spotifyClientIdInput">
+        Spotify Client ID
+        <input id="spotifyClientIdInput" type="text" placeholder="Paste Spotify app Client ID here" autocomplete="off" />
+      </label>
+      <p id="spotifyStatusText" class="spotify-status">Spotify is not connected.</p>
     </section>
 
     <section class="result-grid">
