@@ -2,9 +2,17 @@
 
 ## Version Summary
 
-**Current Version:** v0.2.1  
-**Status:** Testable voice-first PWA with parser fixes and AI review queue  
-**Last Updated:** 2026-06-23
+**Current Version:** v0.2.2  
+**Status:** Current phase wrapped; v0.3.0 intent-engine package planned  
+**Last Updated:** 2026-06-24
+
+### v0.2.2 Summary
+
+- Wrapped the current testing/prototype phase before switching to other work.
+- Documented the standing rule to think ahead and bundle closely related enhancements into the same proposed revision.
+- Documented the preferred future workflow to suspend GitHub Pages builds during multi-commit revisions when the connector supports it, then re-enable after all commits are complete.
+- Documented the planned v0.3.0 intent-engine package.
+- Preserved the rule that every revision must end in a deployable, testable state.
 
 ### v0.2.1 Summary
 
@@ -25,7 +33,7 @@
 
 dJT is a custom DJ web app controlled primarily by voice commands. The app should run on an iPad or iPhone through Safari, be hosted for free using GitHub Pages, and eventually control Spotify playback through Spotify's APIs.
 
-The goal is to build a personal DJ assistant that understands practical DJ instructions such as skipping songs, restarting songs, changing energy, favoring artists, blocking artists or genres for a period of time, adding songs to playlists, capturing unclear phrases for future rules, and managing a live DJ session.
+The goal is to build a personal DJ assistant that understands practical DJ instructions such as skipping songs, restarting songs, changing energy, immediate play requests, favoring artists, blocking artists or genres for a period of time, adding songs to playlists, capturing unclear phrases for future rules, and managing a live DJ session.
 
 ---
 
@@ -103,6 +111,7 @@ Current approach:
 10. Voice is the primary interface; typing is only a fallback/debug tool.
 11. Every revision must end in a deployable, testable state before beginning the next feature.
 12. Unknown or AI-needed phrases should be captured so real usage can guide future parser rules.
+13. Before proposing a revision, think ahead and bundle closely related enhancements together, especially parser architecture, testing, stats, and review tools.
 
 ---
 
@@ -144,6 +153,12 @@ dJT vX.Y.Z -> vA.B.C (x of y) - short description
 
 New repository initialization may use `null` as the starting version.
 
+### Rule 6: Deployment Build Control
+
+For future multi-commit revisions, if the GitHub connector supports it, suspend GitHub Pages builds or deployment during the commit sequence, perform all commits, then re-enable builds so only the final revision is deployed for testing.
+
+If the connector cannot control Pages or Actions, use the closest available workflow and tell the user.
+
 ---
 
 ## Versioning System
@@ -159,6 +174,8 @@ Known versions:
 - `null`: empty repository before migration
 - `v0.2.0`: migrated voice-first command prototype
 - `v0.2.1`: testable PWA parser improvement release
+- `v0.2.2`: phase wrap and v0.3.0 planning documentation
+- `v0.3.0`: planned intent-engine package
 - `v1.0.0`: first genuinely usable DJ app release
 
 ---
@@ -204,6 +221,14 @@ The current parser supports or anticipates these actions:
 17. `undo_last_action`
 18. `needs_ai_interpretation`
 
+Planned immediate play actions for v0.3.0:
+
+19. `play_artist`
+20. `play_song`
+21. `play_album`
+22. `play_playlist`
+23. `play_genre`
+
 ---
 
 ## Command Categories
@@ -221,6 +246,22 @@ The current parser supports or anticipates these actions:
 - play it from the top
 - run it back
 - stop after this song
+
+### Immediate Play Requests
+
+These should become first-class intents in v0.3.0 because they are different from long-term favoring.
+
+- play Tom Petty
+- play me some Tom Petty
+- I want to hear Tom Petty
+- let's hear Tom Petty
+- put on some Tom Petty
+- give me some Tom Petty
+- I could go for some Tom Petty
+- throw on some Tom Petty
+- play some country
+- play classic rock
+- play some 80s music
 
 ### Queue Control
 
@@ -334,6 +375,23 @@ The UI exposes the queue so testing reveals which phrases are not yet handled lo
 
 This lets dJT learn from testing without immediately requiring paid AI calls.
 
+### Planned AI Review Queue Improvements
+
+The queue should evolve from a simple list into an aggregated review system.
+
+Each phrase or normalized phrase group should track:
+
+- phrase
+- normalized phrase
+- count
+- first seen
+- last seen
+- last source
+- last reason
+- whether a deterministic rule has been implemented
+
+This will show the most common unsupported phrases and guide future rule development.
+
 ---
 
 ## Regression Tests
@@ -346,6 +404,50 @@ These real phrases were found during testing or requested during the v0.2.1 revi
 | `play this song from the beginning` | `restart_track` |
 | `don't play any more country tonight` | `block_genre`, genre `Country`, duration `tonight` |
 | `play Tom Petty for the next 1 hour` | `favor_artist`, artist `Tom Petty`, duration `1 hour` |
+
+Planned v0.3.0 regression additions:
+
+| Phrase | Expected Action |
+|---|---|
+| `Play me some Tom Petty` | `play_artist`, artist `Tom Petty` |
+| `Let's hear Tom Petty` | `play_artist`, artist `Tom Petty` |
+| `Put on some Tom Petty` | `play_artist`, artist `Tom Petty` |
+| `Give me some Tom Petty` | `play_artist`, artist `Tom Petty` |
+
+---
+
+## Planned v0.3.0: Intent Engine Package
+
+v0.3.0 should be a bundled parser architecture revision, not a piecemeal phrase-fix release.
+
+It should include:
+
+1. **Intent Engine**
+   - Determine intent before phrase-specific matching.
+   - Separate immediate play, favor, reduce, block, temporary block, queue, playback, playlist, genre, and correction intents.
+
+2. **Immediate Play Actions**
+   - Add `play_artist`, `play_song`, `play_album`, `play_playlist`, and `play_genre`.
+   - Treat commands like "Play me some Tom Petty" as immediate requests, not favor rules.
+
+3. **AI Review Queue Aggregation**
+   - Group repeated unknown phrases.
+   - Track count, first seen, last seen, source, and status.
+   - Show most common unknown phrases first.
+
+4. **Regression Test Database**
+   - Move beyond a list in `MASTER_PLAN.md`.
+   - Store test cases in a dedicated data structure or file.
+   - Include phrase, expected action, expected fields, and version fixed.
+
+5. **Parser Statistics**
+   - Show commands handled locally.
+   - Show commands captured for AI review.
+   - Show local parse success rate.
+   - Show most common unknown phrases.
+   - Show most common intents.
+
+This package should make future parser improvements data-driven and reduce the need for AI calls.
 
 ---
 
@@ -436,6 +538,10 @@ dJT should be installable from Safari using Share -> Add to Home Screen and shou
 
 Before adding real AI calls, commands that need AI should be saved locally during testing so the user and assistant can improve deterministic parsing.
 
+### Bundle Related Enhancements
+
+When a feature direction reveals obvious companion improvements, the assistant should think ahead and propose them together instead of discovering them one by one.
+
 ---
 
 ## Project Conventions
@@ -457,6 +563,18 @@ Every commit should update the version summary and version history when appropri
 ---
 
 ## Version History
+
+### v0.2.2 - 2026-06-24
+
+Phase wrap and v0.3.0 planning documentation.
+
+Included:
+
+- Standing rule to bundle obvious related enhancements.
+- GitHub Pages build-suspension preference for future multi-commit revisions.
+- Planned v0.3.0 intent-engine package.
+- Immediate play request category.
+- Planned parser statistics and review queue aggregation.
 
 ### v0.2.1 - 2026-06-23
 
@@ -492,12 +610,9 @@ Included:
 
 ## Next Likely Steps
 
-1. Enable GitHub Pages for `jtaylor807/dJT` from the `main` branch and `/root` folder.
-2. Open the GitHub Pages URL in Safari.
-3. Use Share -> Add to Home Screen to install dJT.
-4. Test voice recognition and parser behavior.
-5. Review the AI Review Queue after testing.
-6. Convert frequent AI-needed phrases into deterministic parser rules.
-7. Decide how to persist actual DJ rules locally.
-8. Add a visible rule list for blocked/favored artists, genres, and songs.
-9. Add Spotify authentication only after the command parser proves useful.
+1. Switch gears to the user's next task.
+2. When returning to dJT, read this file first.
+3. Test the current deployed app.
+4. Review the AI Review Queue after testing.
+5. Build v0.3.0 as the bundled intent-engine package.
+6. Add Spotify authentication only after the parser proves useful.
