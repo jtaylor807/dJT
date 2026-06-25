@@ -2,9 +2,19 @@
 
 ## Version Summary
 
-**Current Version:** v0.2.2  
-**Status:** Current phase wrapped; v0.3.0 intent-engine package planned  
+**Current Version:** v0.3.0  
+**Status:** Spotify playback test added  
 **Last Updated:** 2026-06-24
+
+### v0.3.0 Summary
+
+- Added the first Spotify Web API integration test.
+- Added browser-based Spotify Authorization Code with PKCE login.
+- Added a Spotify Client ID field that stores the ID locally in the browser.
+- Added a Spotify Test panel with Connect Spotify and Play Saving Grace buttons.
+- Added code to search Spotify for `Saving Grace` by Tom Petty and start playback on the user's active Spotify device.
+- Documented that an active Spotify device is required before playback can be started.
+- Noted that the current GitHub connector does not expose a control to suspend GitHub Pages builds during multi-commit revisions.
 
 ### v0.2.2 Summary
 
@@ -13,19 +23,6 @@
 - Documented the preferred future workflow to suspend GitHub Pages builds during multi-commit revisions when the connector supports it, then re-enable after all commits are complete.
 - Documented the planned v0.3.0 intent-engine package.
 - Preserved the rule that every revision must end in a deployable, testable state.
-
-### v0.2.1 Summary
-
-- Added Progressive Web App support so dJT can be added to the iPhone/iPad Home Screen from Safari.
-- Added dJT branding with lowercase `d` and uppercase `JT`.
-- Added app icon and manifest metadata.
-- Fixed parser bugs found during testing.
-- Expanded phrase handling for restart, block, skip, pause, play, favor, reduce, playlist, undo, and rules commands.
-- Added `block_genre` handling so phrases like "don't play any more country tonight" do not get misread as "more country."
-- Added timed play/favor parsing for phrases like "play Tom Petty for the next 1 hour."
-- Added an AI Review Queue that locally captures commands needing AI interpretation so future deterministic rules can be developed.
-- Added regression tests from real testing feedback.
-- Added the standing rule that every revision must end in a deployable, testable state.
 
 ---
 
@@ -71,16 +68,31 @@ dJT is voice-first. Typing is only a debug fallback so parser behavior can be te
 
 ### Spotify Integration
 
-The app will eventually control Spotify through Spotify APIs where possible.
+The app controls Spotify through Spotify APIs where possible.
 
-Expected Spotify-related capabilities:
+Current Spotify test capability:
 
-- authenticate with the user's Spotify Premium account
+- User pastes a Spotify app Client ID into dJT.
+- dJT performs browser-based Authorization Code with PKCE login.
+- dJT requests `user-read-playback-state` and `user-modify-playback-state` scopes.
+- dJT searches Spotify for `Saving Grace` by Tom Petty.
+- dJT starts playback on the user's active Spotify device.
+
+Important Spotify test notes:
+
+- The user must have Spotify Premium.
+- A Spotify app must exist in the Spotify Developer Dashboard.
+- The Spotify app must include the dJT GitHub Pages URL as a redirect URI.
+- A Spotify device must already be active. Open Spotify on the iPad/iPhone or another device and start any song before pressing Play Saving Grace.
+
+Expected future Spotify-related capabilities:
+
 - search songs, artists, albums, and playlists
 - control playback
 - add songs to playlists
 - manage queue behavior where Spotify allows it
 - read current playback state
+- connect parsed voice commands to Spotify actions
 
 ### AI Strategy
 
@@ -157,7 +169,7 @@ New repository initialization may use `null` as the starting version.
 
 For future multi-commit revisions, if the GitHub connector supports it, suspend GitHub Pages builds or deployment during the commit sequence, perform all commits, then re-enable builds so only the final revision is deployed for testing.
 
-If the connector cannot control Pages or Actions, use the closest available workflow and tell the user.
+If the connector cannot control Pages or Actions, use the closest available workflow and tell the user. As of v0.3.0, the available connector actions did not include a Pages build suspension control.
 
 ---
 
@@ -175,7 +187,7 @@ Known versions:
 - `v0.2.0`: migrated voice-first command prototype
 - `v0.2.1`: testable PWA parser improvement release
 - `v0.2.2`: phase wrap and v0.3.0 planning documentation
-- `v0.3.0`: planned intent-engine package
+- `v0.3.0`: Spotify playback test integration
 - `v1.0.0`: first genuinely usable DJ app release
 
 ---
@@ -220,14 +232,32 @@ The current parser supports or anticipates these actions:
 16. `show_rules`
 17. `undo_last_action`
 18. `needs_ai_interpretation`
+19. `spotify_play_track`
 
-Planned immediate play actions for v0.3.0:
+Planned immediate play actions:
 
-19. `play_artist`
-20. `play_song`
-21. `play_album`
-22. `play_playlist`
-23. `play_genre`
+20. `play_artist`
+21. `play_song`
+22. `play_album`
+23. `play_playlist`
+24. `play_genre`
+
+---
+
+## Spotify Test Procedure
+
+To test the v0.3.0 Spotify button:
+
+1. Create a Spotify app in the Spotify Developer Dashboard.
+2. Add the dJT GitHub Pages URL as a redirect URI.
+3. Open dJT.
+4. Paste the Spotify Client ID into the Spotify Client ID field.
+5. Tap Connect Spotify.
+6. Approve the requested scopes.
+7. Open Spotify on the iPad/iPhone or another device and start any song.
+8. Return to dJT and tap Play Saving Grace.
+
+If no active Spotify device exists, Spotify may return an error. Start playback in Spotify first, then retry.
 
 ---
 
@@ -249,7 +279,7 @@ Planned immediate play actions for v0.3.0:
 
 ### Immediate Play Requests
 
-These should become first-class intents in v0.3.0 because they are different from long-term favoring.
+These should become first-class intents because they are different from long-term favoring.
 
 - play Tom Petty
 - play me some Tom Petty
@@ -373,30 +403,11 @@ Commands that return `needs_ai_interpretation` are saved in browser `localStorag
 
 The UI exposes the queue so testing reveals which phrases are not yet handled locally. During future revisions, the queue should be reviewed and converted into deterministic parser rules where practical.
 
-This lets dJT learn from testing without immediately requiring paid AI calls.
-
-### Planned AI Review Queue Improvements
-
-The queue should evolve from a simple list into an aggregated review system.
-
-Each phrase or normalized phrase group should track:
-
-- phrase
-- normalized phrase
-- count
-- first seen
-- last seen
-- last source
-- last reason
-- whether a deterministic rule has been implemented
-
-This will show the most common unsupported phrases and guide future rule development.
-
 ---
 
 ## Regression Tests
 
-These real phrases were found during testing or requested during the v0.2.1 revision and must remain handled correctly:
+These real phrases were found during testing or requested and must remain handled correctly:
 
 | Phrase | Expected Action |
 |---|---|
@@ -404,50 +415,7 @@ These real phrases were found during testing or requested during the v0.2.1 revi
 | `play this song from the beginning` | `restart_track` |
 | `don't play any more country tonight` | `block_genre`, genre `Country`, duration `tonight` |
 | `play Tom Petty for the next 1 hour` | `favor_artist`, artist `Tom Petty`, duration `1 hour` |
-
-Planned v0.3.0 regression additions:
-
-| Phrase | Expected Action |
-|---|---|
-| `Play me some Tom Petty` | `play_artist`, artist `Tom Petty` |
-| `Let's hear Tom Petty` | `play_artist`, artist `Tom Petty` |
-| `Put on some Tom Petty` | `play_artist`, artist `Tom Petty` |
-| `Give me some Tom Petty` | `play_artist`, artist `Tom Petty` |
-
----
-
-## Planned v0.3.0: Intent Engine Package
-
-v0.3.0 should be a bundled parser architecture revision, not a piecemeal phrase-fix release.
-
-It should include:
-
-1. **Intent Engine**
-   - Determine intent before phrase-specific matching.
-   - Separate immediate play, favor, reduce, block, temporary block, queue, playback, playlist, genre, and correction intents.
-
-2. **Immediate Play Actions**
-   - Add `play_artist`, `play_song`, `play_album`, `play_playlist`, and `play_genre`.
-   - Treat commands like "Play me some Tom Petty" as immediate requests, not favor rules.
-
-3. **AI Review Queue Aggregation**
-   - Group repeated unknown phrases.
-   - Track count, first seen, last seen, source, and status.
-   - Show most common unknown phrases first.
-
-4. **Regression Test Database**
-   - Move beyond a list in `MASTER_PLAN.md`.
-   - Store test cases in a dedicated data structure or file.
-   - Include phrase, expected action, expected fields, and version fixed.
-
-5. **Parser Statistics**
-   - Show commands handled locally.
-   - Show commands captured for AI review.
-   - Show local parse success rate.
-   - Show most common unknown phrases.
-   - Show most common intents.
-
-This package should make future parser improvements data-driven and reduce the need for AI calls.
+| Spotify Test button | `spotify_play_track`, track `Saving Grace`, artist `Tom Petty` |
 
 ---
 
@@ -472,7 +440,10 @@ If AI is disabled or never called, AI usage cost should be zero.
 
 ## Future Ideas Backlog
 
-- Spotify authentication
+- intent-engine parser package
+- immediate play actions wired to Spotify
+- Spotify authentication refinements
+- Spotify device picker
 - Spotify playback controls
 - Spotify playlist management
 - persistent rule storage
@@ -542,6 +513,10 @@ Before adding real AI calls, commands that need AI should be saved locally durin
 
 When a feature direction reveals obvious companion improvements, the assistant should think ahead and propose them together instead of discovering them one by one.
 
+### Add Spotify Test Before Full Spotify Integration
+
+The first Spotify milestone is a hardcoded playback test for `Saving Grace` by Tom Petty. This validates authentication, search, playback control, active device behavior, and error handling before wiring Spotify into voice commands.
+
 ---
 
 ## Project Conventions
@@ -563,6 +538,20 @@ Every commit should update the version summary and version history when appropri
 ---
 
 ## Version History
+
+### v0.3.0 - 2026-06-24
+
+Spotify playback test integration.
+
+Included:
+
+- Spotify Test panel.
+- Spotify Client ID local storage.
+- Browser-based Spotify Authorization Code with PKCE login.
+- Spotify search for `Saving Grace` by Tom Petty.
+- Spotify playback request to active user device.
+- Spotify status/error display.
+- Master plan updates for Spotify testing.
 
 ### v0.2.2 - 2026-06-24
 
@@ -610,9 +599,8 @@ Included:
 
 ## Next Likely Steps
 
-1. Switch gears to the user's next task.
-2. When returning to dJT, read this file first.
-3. Test the current deployed app.
-4. Review the AI Review Queue after testing.
-5. Build v0.3.0 as the bundled intent-engine package.
-6. Add Spotify authentication only after the parser proves useful.
+1. Test the Spotify Client ID and login flow.
+2. Test the Play Saving Grace button with an active Spotify device.
+3. Add a Spotify device picker if active-device behavior is annoying.
+4. Add immediate play actions and wire them to Spotify search/playback.
+5. Build the bundled intent-engine package.
