@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="dJT app icon">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="20%" r="90%">
+      <stop offset="0%" stop-color="#23264a" />
+      <stop offset="55%" stop-color="#11111f" />
+      <stop offset="100%" stop-color="#05050a" />
+    </radialGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6ff7ff" />
+      <stop offset="48%" stop-color="#15b9ff" />
+      <stop offset="100%" stop-color="#7367ff" />
+    </linearGradient>
+    <linearGradient id="white" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#cfd3df" />
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#10d8ff" />
+      <stop offset="100%" stop-color="#b14cff" />
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.09 0 0 0 0 0.72 0 0 0 0 1 0 0 0 0.75 0" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)" />
+  <circle cx="512" cy="512" r="332" fill="none" stroke="url(#purple)" stroke-width="12" opacity="0.55" />
+  <circle cx="512" cy="512" r="270" fill="none" stroke="#1abfff" stroke-width="7" opacity="0.24" />
+  <circle cx="512" cy="512" r="210" fill="none" stroke="#a54dff" stroke-width="5" opacity="0.22" />
+
+  <g filter="url(#glow)">
+    <path d="M242 606c0-104 78-184 183-184 38 0 69 10 92 28V232h118v498H518v-48c-24 37-62 58-112 58-97 0-164-55-164-134Zm121-5c0 39 32 66 77 66 46 0 80-30 80-70 0-39-32-67-78-67-47 0-79 30-79 71Z" fill="url(#cyan)" />
+    <path d="M610 676h80l60-292h-84l19-92h280l-19 92h-82l-60 292h80l-19 94H591l19-94Z" fill="url(#white)" />
+    <path d="M468 764h30v-82h28v82h32v-122h28v122h32v-176h28v176h32v-122h28v122h32v-82h28v82h30" fill="none" stroke="url(#purple)" stroke-width="16" stroke-linecap="round" opacity="0.9" />
+  </g>
+</svg>
