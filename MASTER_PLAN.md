@@ -2,9 +2,21 @@
 
 ## Version Summary
 
-**Current Version:** v0.2.0  
-**Status:** Voice-first command prototype migrated from JTDJ  
+**Current Version:** v0.2.1  
+**Status:** Testable voice-first PWA with parser fixes and AI review queue  
 **Last Updated:** 2026-06-23
+
+### v0.2.1 Summary
+
+- Added Progressive Web App support so dJT can be added to the iPhone/iPad Home Screen from Safari.
+- Added dJT branding with lowercase `d` and uppercase `JT`.
+- Added app icon and manifest metadata.
+- Fixed parser bugs found during testing.
+- Expanded phrase handling for restart, block, skip, pause, play, favor, reduce, playlist, undo, and rules commands.
+- Added `block_genre` handling so phrases like "don't play any more country tonight" do not get misread as "more country."
+- Added an AI Review Queue that locally captures commands needing AI interpretation so future deterministic rules can be developed.
+- Added regression tests from real testing feedback.
+- Added the standing rule that every revision must end in a deployable, testable state.
 
 ### v0.2.0 Summary
 
@@ -22,7 +34,7 @@
 
 dJT is a custom DJ web app controlled primarily by voice commands. The app should run on an iPad or iPhone through Safari, be hosted for free using GitHub Pages, and eventually control Spotify playback through Spotify's APIs.
 
-The goal is not to build a generic playlist app. The goal is to build a personal DJ assistant that understands practical DJ instructions such as skipping songs, changing energy, favoring artists, blocking artists for a period of time, adding songs to playlists, and managing a live DJ session.
+The goal is not to build a generic playlist app. The goal is to build a personal DJ assistant that understands practical DJ instructions such as skipping songs, changing energy, favoring artists, blocking artists or genres for a period of time, adding songs to playlists, and managing a live DJ session.
 
 The user will direct the product. The assistant will do the engineering work, but changes must follow the project rules in this document.
 
@@ -46,6 +58,21 @@ Reasoning:
 ### Hosting
 
 The initial hosting target is GitHub Pages.
+
+### Progressive Web App Direction
+
+dJT should behave like an app when added to the iPhone/iPad Home Screen from Safari.
+
+The app should include:
+
+- Web app manifest.
+- Apple mobile web app meta tags.
+- Theme color.
+- Home Screen capable mode.
+- App title.
+- App icon.
+
+The target Home Screen name is `dJT`, with lowercase `d` and uppercase `JT`.
 
 ### Interface Direction
 
@@ -76,9 +103,11 @@ The preferred design is:
 
 1. Try to parse commands locally with deterministic rules.
 2. If the command is clear, execute locally with no AI cost.
-3. If the command is ambiguous or too natural-language-heavy, send it to AI for interpretation.
-4. AI must return a structured command, not free-form instructions.
-5. The app executes only structured actions it already understands.
+3. If the command is ambiguous or too natural-language-heavy, mark it as `needs_ai_interpretation`.
+4. Save those unclear commands to the AI Review Queue.
+5. Use that queue to decide whether to build more local rules before adding real AI calls.
+6. When AI is eventually added, AI must return a structured command, not free-form instructions.
+7. The app executes only structured actions it already understands.
 
 This keeps the app fast, reliable, inexpensive, and usable even if AI is disabled.
 
@@ -96,6 +125,8 @@ This keeps the app fast, reliable, inexpensive, and usable even if AI is disable
 8. **Add new actions deliberately so the command engine remains understandable.**
 9. **Small non-functional quality-of-life improvements are allowed when they do not change existing functionality or contradict prior decisions.**
 10. **Voice is the primary interface; typing is only a fallback/debug tool.**
+11. **Every revision must end in a deployable, testable state before beginning the next feature.**
+12. **Unknown or AI-needed phrases should be captured so we can learn from real usage and develop better local rules.**
 
 ---
 
@@ -115,13 +146,7 @@ Every time the user gives a new rule, major decision, architecture change, proje
 
 ### Rule 3: Every Commit Must Be Self-Documenting
 
-Every commit should leave the repository in a state where a new ChatGPT conversation can read `MASTER_PLAN.md` and understand:
-
-- What the project is.
-- What decisions have been made.
-- What rules must be followed.
-- What version the project is on.
-- What the next likely steps are.
+Every commit should leave the repository in a state where a new ChatGPT conversation can read `MASTER_PLAN.md` and understand the project, rules, current version, decisions, and next likely steps.
 
 ### Rule 4: Report the New Version After Each Commit
 
@@ -145,12 +170,6 @@ dJT vX.Y.Z -> vA.B.C (x of y) - short description
 
 New repository initialization may use `null` as the starting version.
 
-Example:
-
-```text
-dJT null -> v0.2.0 (2 of 4) - add voice prototype markup
-```
-
 ---
 
 ## Versioning System
@@ -173,13 +192,14 @@ vMAJOR.MINOR.PATCH
 
 - `null`: Empty repository before migration.
 - `v0.2.0`: Migrated voice-first command prototype.
+- `v0.2.1`: Testable PWA parser improvement release.
 - `v1.0.0`: First genuinely usable DJ app release.
 
 ---
 
 ## Command System Philosophy
 
-The app should understand commands through a pipeline:
+The app should understand commands through this pipeline:
 
 ```text
 User speech/text -> command parser -> structured action -> action executor -> Spotify/app behavior
@@ -187,37 +207,17 @@ User speech/text -> command parser -> structured action -> action executor -> Sp
 
 The app should not directly execute raw natural language. It should execute only known structured actions.
 
-Example structured action:
-
-```json
-{
-  "action": "set_artist_rule",
-  "artist": "Tom Petty",
-  "rule": "favor",
-  "weight": 2,
-  "duration": "tonight"
-}
-```
-
 Different user phrases should map to the same structured action when the intent is the same.
 
-Examples that should resolve similarly:
+The parser should prioritize negative intent before matching positive words like `more`. For example, `don't play any more country tonight` must be understood as blocking or avoiding country, not as requesting more country.
 
-- "Don't play Tom Petty for a week."
-- "Don't play Tom Petty for seven days."
-- "Block Tom Petty for 7 days."
-
-The parser should standardize durations such as "a week," "seven days," and similar expressions into a consistent expiration value.
-
-Threatening or emotional phrasing should be interpreted by intent, not literally. For example, "I'll delete you if you play Tom Petty again" may mean block the artist, while "I'll delete you if you don't play Tom Petty every other song tonight" means strongly favor that artist. If the local parser cannot confidently distinguish those, AI fallback should be used.
+Threatening or emotional phrasing should be interpreted by intent, not literally. If the local parser cannot confidently distinguish the intent, AI fallback should be used later and the phrase should be saved to the AI Review Queue now.
 
 ---
 
 ## Command Categories
 
 ### 1. Playback Control
-
-These should be handled locally.
 
 - play
 - pause
@@ -226,6 +226,7 @@ These should be handled locally.
 - previous song
 - restart song
 - replay this song
+- play this song from the beginning
 - stop after this song
 - volume up
 - volume down
@@ -233,8 +234,6 @@ These should be handled locally.
 - unmute
 
 ### 2. Queue Control
-
-These should be handled locally unless the wording is unusual.
 
 - add this song to the queue
 - play this next
@@ -246,10 +245,9 @@ These should be handled locally unless the wording is unusual.
 
 ### 3. Artist Rules
 
-Artist rules are a core part of the DJ brain.
-
 - do not play this artist for a specified period
 - never play this artist tonight
+- never play this artist for the next 7 days
 - block this artist permanently
 - play more of this artist tonight
 - play less of this artist tonight
@@ -259,8 +257,6 @@ Artist rules are a core part of the DJ brain.
 
 ### 4. Song Rules
 
-Song rules apply the same concept to individual tracks.
-
 - do not play this song again tonight
 - never play this song
 - play this song more often
@@ -268,9 +264,17 @@ Song rules apply the same concept to individual tracks.
 - remove this song from rotation
 - play this song next time a slow song is needed
 
-### 5. Playlist and Library Actions
+### 5. Genre Rules
 
-These are Spotify-specific or library-management related.
+- do not play any more country tonight
+- no more country tonight
+- stop playing country tonight
+- play more country
+- play less pop
+- switch away from country
+- enough country
+
+### 6. Playlist and Library Actions
 
 - add this song to my playlist
 - add this artist to my playlist
@@ -280,12 +284,8 @@ These are Spotify-specific or library-management related.
 - show my DJ playlist
 - remove this song from a playlist
 
-### 6. Music Direction
+### 7. Music Direction
 
-These commands may require AI if they are vague, contextual, or mood-based.
-
-- play more country
-- play less pop
 - keep it upbeat
 - slow it down
 - make it rowdier
@@ -295,22 +295,25 @@ These commands may require AI if they are vague, contextual, or mood-based.
 - keep the energy at 8
 - play music like the current song
 
-### 7. Time-Based Rules
+### 8. Time-Based Rules
 
 The parser should convert time phrases into a standard expiration time or session scope.
 
 - tonight
 - one hour
 - seven days
+- 7 days
+- next 7 days
+- the next 7 days
+- next seven days
+- the next seven days
 - a week
 - until midnight
 - until next weekend
 - permanently
 - just this party
 
-### 8. DJ Session Controls
-
-These commands make the app feel like a live DJ assistant.
+### 9. DJ Session Controls
 
 - start party mode
 - start dinner mode
@@ -322,9 +325,7 @@ These commands make the app feel like a live DJ assistant.
 - do not repeat anything from tonight
 - show what was played tonight
 
-### 9. Discovery Commands
-
-These commands are useful but may rely heavily on Spotify search and recommendation behavior.
+### 10. Discovery Commands
 
 - find songs like this
 - find more artists like this
@@ -334,9 +335,7 @@ These commands are useful but may rely heavily on Spotify search and recommendat
 - play popular songs only
 - avoid overplayed songs
 
-### 10. Confirmation and Correction Commands
-
-These are important for voice interaction and mistake recovery.
+### 11. Confirmation and Correction Commands
 
 - yes
 - no
@@ -352,7 +351,7 @@ These are important for voice interaction and mistake recovery.
 
 ## Initial MVP Action List
 
-The first command engine should start with these structured actions:
+The first command engine should support these structured actions:
 
 1. `play`
 2. `pause`
@@ -364,30 +363,57 @@ The first command engine should start with these structured actions:
 8. `reduce_artist`
 9. `block_song`
 10. `favor_song`
-11. `add_current_song_to_playlist`
-12. `add_artist_to_playlist`
-13. `set_energy`
-14. `set_genre_preference`
-15. `show_rules`
-16. `undo_last_action`
+11. `block_genre`
+12. `set_genre_preference`
+13. `add_current_song_to_playlist`
+14. `add_artist_to_playlist`
+15. `set_energy`
+16. `show_rules`
+17. `undo_last_action`
+18. `needs_ai_interpretation`
 
 ---
 
-## v0.2.0 Prototype Scope
+## v0.2.1 Prototype Scope
 
-The v0.2.0 prototype is intentionally small. It does not connect to Spotify and does not call AI.
+The v0.2.1 prototype remains intentionally small. It does not connect to Spotify and does not call AI.
 
 It includes:
 
-- A large tap-to-talk button.
-- Browser speech recognition when available.
-- Transcript display.
-- Local command parser.
-- Structured JSON output.
-- A debug-only typed fallback.
-- Basic commands for playback, artist blocking/favoring/reducing, song blocking/favoring, playlist actions, energy, genre preference, showing rules, and undo.
+- PWA install metadata.
+- dJT app icon branding.
+- Better parser phrase coverage.
+- Negative-intent-first parsing.
+- Genre blocking.
+- Regression tests.
+- Local AI Review Queue for commands that would need AI later.
 
-The point of this version is to prove the spoken-command-to-structured-action pipeline before adding Spotify.
+---
+
+## AI Review Queue
+
+Commands that return `needs_ai_interpretation` should be saved in browser `localStorage` with:
+
+- original phrase
+- source (`voice` or `debug`)
+- reason
+- timestamp
+
+The UI should expose this queue so testing can reveal which natural phrases are not yet handled locally. During future revisions, the queue should be reviewed and converted into deterministic parser rules where practical.
+
+This allows dJT to learn from testing without immediately requiring paid AI calls.
+
+---
+
+## Regression Tests
+
+These real phrases were found during testing and must remain handled correctly:
+
+| Phrase | Expected Action |
+|---|---|
+| `never play Tom Petty for the next 7 days` | `block_artist`, artist `Tom Petty`, duration `7 days` |
+| `play this song from the beginning` | `restart_track` |
+| `don't play any more country tonight` | `block_genre`, genre `Country`, duration `tonight` |
 
 ---
 
@@ -412,9 +438,6 @@ If AI is disabled or never called, AI usage cost should be zero.
 
 ## Future Ideas Backlog
 
-- Voice command capture.
-- AI fallback parser.
-- Local deterministic command parser.
 - Spotify authentication.
 - Spotify playback controls.
 - Spotify playlist management.
@@ -473,21 +496,25 @@ The user does not intend for typing to be the main interaction model. dJT should
 
 The project was originally started in `jtaylor807/JTDJ`, then migrated to `jtaylor807/dJT` at the user's request.
 
+### Decision: Make dJT a PWA
+
+dJT should be installable from Safari using Share -> Add to Home Screen and should launch like an app where supported.
+
+### Decision: Capture AI-Needed Phrases Locally
+
+Before adding real AI calls, commands that need AI should be saved locally during testing so the user and assistant can find opportunities to improve deterministic parsing.
+
 ---
 
 ## Project Conventions
 
 ### Main Planning File
 
-The main project planning file is:
-
 ```text
 MASTER_PLAN.md
 ```
 
 ### Generated App Entry Point
-
-The user prefers generated files to be named `index.html` when appropriate. The web app entry point is:
 
 ```text
 index.html
@@ -507,7 +534,7 @@ Multiple commits for the same version change:
 dJT vOLD -> vNEW (x of y) - concise description
 ```
 
-For repository initialization or migration from an empty repo, use:
+For repository initialization or migration from an empty repo:
 
 ```text
 dJT null -> vNEW (x of y) - concise description
@@ -531,6 +558,21 @@ Every commit should update the version summary and version history in this file.
 
 ## Version History
 
+### v0.2.1 - 2026-06-23
+
+Testable PWA parser improvement release.
+
+Included:
+
+- PWA metadata and manifest.
+- dJT app icon.
+- Parser fixes for testing bugs.
+- Expanded phrase support.
+- Genre blocking.
+- AI Review Queue.
+- Regression tests.
+- Rule that every revision ends testable.
+
 ### v0.2.0 - 2026-06-23
 
 Voice-first command prototype migrated into the renamed `dJT` repository.
@@ -552,9 +594,10 @@ Included:
 ## Next Likely Steps
 
 1. Enable GitHub Pages for `jtaylor807/dJT` from the `main` branch and `/root` folder.
-2. Test voice recognition on the target iPad/iPhone browser.
-3. Test local parsing with real spoken commands.
-4. Expand parser patterns based on failed commands.
-5. Decide how to persist rules locally.
-6. Add a visible rule list for blocked/favored artists and songs.
-7. Add Spotify authentication only after the command parser proves useful.
+2. Add dJT to the iPad/iPhone Home Screen from Safari.
+3. Test voice recognition and parser behavior.
+4. Review the AI Review Queue after testing.
+5. Convert frequent AI-needed phrases into deterministic parser rules.
+6. Decide how to persist actual DJ rules locally.
+7. Add a visible rule list for blocked/favored artists, genres, and songs.
+8. Add Spotify authentication only after the command parser proves useful.
