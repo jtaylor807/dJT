@@ -21,7 +21,7 @@
       <div class="brand-lockup" aria-label="dJT">
         <img class="brand-icon" src="icon.svg" alt="" />
         <div>
-          <p class="eyebrow">dJT v0.3.0</p>
+          <p class="eyebrow">dJT v0.3.1</p>
           <h1><span class="brand-d">d</span>JT</h1>
         </div>
       </div>
@@ -40,15 +40,12 @@
 
     <section class="spotify-panel" aria-labelledby="spotify-title">
       <h2 id="spotify-title">Spotify Test</h2>
-      <p>Connect Spotify, then play “Saving Grace” by Tom Petty on your active Spotify device.</p>
+      <p>Connect your Spotify Premium account, then play “Saving Grace” by Tom Petty on your active Spotify device.</p>
       <div class="spotify-controls">
         <button id="spotifyLoginButton" type="button">Connect Spotify</button>
         <button id="playSavingGraceButton" type="button">Play Saving Grace</button>
       </div>
-      <label class="client-id-field" for="spotifyClientIdInput">
-        Spotify Client ID
-        <input id="spotifyClientIdInput" type="text" placeholder="Paste Spotify app Client ID here" autocomplete="off" />
-      </label>
+      <input id="spotifyClientIdInput" type="hidden" value="00b9c89802ff42b088a25a636c9e9d61" />
       <p id="spotifyStatusText" class="spotify-status">Spotify is not connected.</p>
     </section>
 
@@ -85,6 +82,9 @@
     </section>
   </main>
 
+  <script>
+    localStorage.setItem('djt_spotify_client_id', '00b9c89802ff42b088a25a636c9e9d61');
+  </script>
   <script src="app.js"></script>
 </body>
 </html>
