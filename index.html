@@ -13,8 +13,23 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=0.3.4" />
   <style>
+    .app-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem);
+      gap: 1rem;
+      align-items: start;
+      width: min(96rem, 100%);
+      margin: 0 auto;
+      padding: 0 1rem 2rem;
+    }
+
+    .app-layout .app-shell {
+      width: 100%;
+      margin: 0;
+    }
+
     .playlist-sync-panel {
       margin-top: 1rem;
       padding-top: 1rem;
@@ -52,91 +67,242 @@
       white-space: nowrap;
       opacity: 0.75;
     }
+
+    .diagnostics-panel {
+      position: sticky;
+      top: 1rem;
+      max-height: calc(100vh - 2rem);
+      overflow: auto;
+      padding: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 1rem;
+      background: rgba(24, 24, 34, 0.96);
+      box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.28);
+    }
+
+    .diagnostics-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .diagnostics-header h2,
+    .diagnostics-header p {
+      margin: 0;
+    }
+
+    .diagnostics-header p {
+      margin-top: 0.25rem;
+      opacity: 0.72;
+      font-size: 0.9rem;
+    }
+
+    .diagnostic-current {
+      position: fixed;
+      z-index: 20;
+      top: max(0.75rem, env(safe-area-inset-top));
+      right: max(0.75rem, env(safe-area-inset-right));
+      max-width: min(24rem, calc(100vw - 1.5rem));
+      padding: 0.65rem 0.85rem;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: #252533;
+      font-size: 0.86rem;
+      font-weight: 700;
+      box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.28);
+    }
+
+    .diagnostic-current[data-state="working"] { background: #3b3317; }
+    .diagnostic-current[data-state="passed"] { background: #153c25; }
+    .diagnostic-current[data-state="warning"] { background: #4b3514; }
+    .diagnostic-current[data-state="failed"] { background: #511d25; }
+
+    .diagnostic-step-list {
+      display: grid;
+      gap: 0.55rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .diagnostic-step-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.7rem;
+      border-radius: 0.7rem;
+      background: rgba(255, 255, 255, 0.055);
+      border-left: 0.3rem solid rgba(255, 255, 255, 0.16);
+    }
+
+    .diagnostic-step-list li[data-state="working"] { border-left-color: #e3b341; }
+    .diagnostic-step-list li[data-state="passed"] { border-left-color: #45d483; }
+    .diagnostic-step-list li[data-state="warning"] { border-left-color: #f2a947; }
+    .diagnostic-step-list li[data-state="failed"] { border-left-color: #ff6474; }
+
+    .diagnostic-step-list strong,
+    .diagnostic-step-list small {
+      display: block;
+    }
+
+    .diagnostic-step-list small {
+      margin-top: 0.25rem;
+      opacity: 0.72;
+      line-height: 1.3;
+    }
+
+    .diagnostic-step-state {
+      flex: 0 0 auto;
+      align-self: flex-start;
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    .diagnostic-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin: 0.8rem 0;
+    }
+
+    .diagnostic-actions button {
+      flex: 1;
+    }
+
+    .diagnostic-output {
+      max-height: 18rem;
+      overflow: auto;
+      margin: 0;
+      padding: 0.75rem;
+      border-radius: 0.7rem;
+      background: rgba(0, 0, 0, 0.28);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 980px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .diagnostics-panel {
+        position: static;
+        max-height: none;
+      }
+
+      .diagnostic-current {
+        max-width: calc(100vw - 1.5rem);
+      }
+    }
   </style>
 </head>
 <body>
-  <main class="app-shell">
-    <section class="hero">
-      <div class="brand-lockup" aria-label="dJT">
-        <img class="brand-icon" src="icon.svg" alt="" />
-        <div>
-          <p class="eyebrow">dJT v0.3.3</p>
-          <h1><span class="brand-d">d</span>JT</h1>
+  <div id="diagnosticCurrentStep" class="diagnostic-current" data-state="waiting">Diagnostics ready.</div>
+
+  <div class="app-layout">
+    <main class="app-shell">
+      <section class="hero">
+        <div class="brand-lockup" aria-label="dJT">
+          <img class="brand-icon" src="icon.svg" alt="" />
+          <div>
+            <p class="eyebrow">dJT v0.3.4</p>
+            <h1><span class="brand-d">d</span>JT</h1>
+          </div>
         </div>
-      </div>
-      <p class="subtitle">You talk. dJT turns it into structured DJ actions.</p>
-    </section>
+        <p class="subtitle">You talk. dJT turns it into structured DJ actions.</p>
+      </section>
 
-    <section class="voice-panel" aria-labelledby="voice-title">
-      <h2 id="voice-title">Voice Control</h2>
-      <button id="talkButton" class="talk-button" type="button" aria-label="Tap to talk">
-        <span class="mic-symbol">🎙</span>
-        <span>Tap to Talk</span>
-      </button>
-      <p id="supportMessage" class="support-message">Checking voice support…</p>
-      <p id="statusText" class="status-text">Idle</p>
-    </section>
+      <section class="voice-panel" aria-labelledby="voice-title">
+        <h2 id="voice-title">Voice Control</h2>
+        <button id="talkButton" class="talk-button" type="button" aria-label="Tap to talk">
+          <span class="mic-symbol">🎙</span>
+          <span>Tap to Talk</span>
+        </button>
+        <p id="supportMessage" class="support-message">Checking voice support…</p>
+        <p id="statusText" class="status-text">Idle</p>
+      </section>
 
-    <section class="spotify-panel" aria-labelledby="spotify-title">
-      <h2 id="spotify-title">Spotify</h2>
-      <p>Connect your Spotify Premium account, then play “Saving Grace” by Tom Petty on your active Spotify device.</p>
-      <div class="spotify-controls">
-        <button id="spotifyLoginButton" type="button">Connect Spotify</button>
-        <button id="playSavingGraceButton" type="button">Play Saving Grace</button>
-      </div>
-      <input id="spotifyClientIdInput" type="hidden" value="00b9c89802ff42b088a25a636c9e9d61" />
-      <p id="spotifyStatusText" class="spotify-status">Spotify is not connected.</p>
-
-      <div class="playlist-sync-panel" aria-labelledby="playlist-sync-title">
-        <h3 id="playlist-sync-title">Playlist Catalog</h3>
-        <p>Authorize playlist access once, then sync your Spotify playlists into dJT’s local catalog.</p>
+      <section class="spotify-panel" aria-labelledby="spotify-title">
+        <h2 id="spotify-title">Spotify</h2>
+        <p>Connect your Spotify Premium account, then play “Saving Grace” by Tom Petty on your active Spotify device.</p>
         <div class="spotify-controls">
-          <button id="playlistAuthorizeButton" type="button">Reconnect Spotify for Playlists</button>
-          <button id="syncSpotifyPlaylistsButton" type="button">Sync Spotify Playlists</button>
+          <button id="spotifyLoginButton" type="button">Connect Spotify</button>
+          <button id="playSavingGraceButton" type="button">Play Saving Grace</button>
         </div>
-        <p id="playlistSyncStatus" class="spotify-status">Connect Spotify, then tap Sync Spotify Playlists.</p>
-        <p id="playlistCatalogSummary" class="support-message">No playlists have been synced yet.</p>
-        <ul id="playlistCatalogList" class="playlist-catalog-list" aria-label="Synced Spotify playlists"></ul>
-      </div>
-    </section>
+        <input id="spotifyClientIdInput" type="hidden" value="00b9c89802ff42b088a25a636c9e9d61" />
+        <p id="spotifyStatusText" class="spotify-status">Spotify is not connected.</p>
 
-    <section class="result-grid">
-      <article class="card">
-        <h2>Heard</h2>
-        <p id="transcriptText" class="transcript">Nothing yet.</p>
-      </article>
+        <div class="playlist-sync-panel" aria-labelledby="playlist-sync-title">
+          <h3 id="playlist-sync-title">Playlist Catalog</h3>
+          <p>Authorize playlist access once, then sync your Spotify playlists into dJT’s local catalog.</p>
+          <div class="spotify-controls">
+            <button id="playlistAuthorizeButton" type="button">Reconnect Spotify for Playlists</button>
+            <button id="syncSpotifyPlaylistsButton" type="button">Sync Spotify Playlists</button>
+          </div>
+          <p id="playlistSyncStatus" class="spotify-status">Connect Spotify, then tap Sync Spotify Playlists.</p>
+          <p id="playlistCatalogSummary" class="support-message">No playlists have been synced yet.</p>
+          <ul id="playlistCatalogList" class="playlist-catalog-list" aria-label="Synced Spotify playlists"></ul>
+        </div>
+      </section>
 
-      <article class="card">
-        <h2>Structured Action</h2>
-        <pre id="actionOutput" class="output">{}</pre>
-      </article>
-    </section>
+      <section class="result-grid">
+        <article class="card">
+          <h2>Heard</h2>
+          <p id="transcriptText" class="transcript">Nothing yet.</p>
+        </article>
 
-    <section class="debug-panel" aria-labelledby="debug-title">
-      <h2 id="debug-title">Debug Typing Fallback</h2>
-      <p>This is only for parser testing when voice is unavailable.</p>
-      <form id="debugForm" class="debug-form">
-        <input id="debugInput" type="text" placeholder="Example: test a DJ command" autocomplete="off" />
-        <button type="submit">Parse</button>
-      </form>
-    </section>
+        <article class="card">
+          <h2>Structured Action</h2>
+          <pre id="actionOutput" class="output">{}</pre>
+        </article>
+      </section>
 
-    <section class="review-panel" aria-labelledby="review-title">
-      <div class="review-header">
+      <section class="debug-panel" aria-labelledby="debug-title">
+        <h2 id="debug-title">Debug Typing Fallback</h2>
+        <p>This is only for parser testing when voice is unavailable.</p>
+        <form id="debugForm" class="debug-form">
+          <input id="debugInput" type="text" placeholder="Example: test a DJ command" autocomplete="off" />
+          <button type="submit">Parse</button>
+        </form>
+      </section>
+
+      <section class="review-panel" aria-labelledby="review-title">
+        <div class="review-header">
+          <div>
+            <h2 id="review-title">AI Review Queue</h2>
+            <p>Commands the local parser could not confidently handle.</p>
+          </div>
+          <button id="clearReviewQueue" type="button">Clear</button>
+        </div>
+        <div id="reviewQueue" class="review-queue">No AI-needed phrases captured yet.</div>
+      </section>
+    </main>
+
+    <aside class="diagnostics-panel" aria-labelledby="diagnostics-title">
+      <div class="diagnostics-header">
         <div>
-          <h2 id="review-title">AI Review Queue</h2>
-          <p>Commands the local parser could not confidently handle.</p>
+          <h2 id="diagnostics-title">Spotify Diagnostics</h2>
+          <p>Shows the active step and captures Spotify’s exact response without storing your access token.</p>
         </div>
-        <button id="clearReviewQueue" type="button">Clear</button>
       </div>
-      <div id="reviewQueue" class="review-queue">No AI-needed phrases captured yet.</div>
-    </section>
-  </main>
+      <ol id="diagnosticStepList" class="diagnostic-step-list"></ol>
+      <div class="diagnostic-actions">
+        <button id="copyDiagnosticsButton" type="button">Copy Diagnostics</button>
+        <button id="clearDiagnosticsButton" type="button">Clear</button>
+      </div>
+      <pre id="diagnosticOutput" class="diagnostic-output">Diagnostics are loading…</pre>
+    </aside>
+  </div>
 
   <script>
     localStorage.setItem('djt_spotify_client_id', '00b9c89802ff42b088a25a636c9e9d61');
   </script>
-  <script src="app.js"></script>
-  <script src="playlist-sync.js"></script>
+  <script src="app.js?v=0.3.4"></script>
+  <script src="playlist-sync.js?v=0.3.4"></script>
 </body>
 </html>
