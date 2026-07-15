@@ -28,14 +28,15 @@ playlistAuthorizeButton?.addEventListener('click', async () => {
   }
 });
 
-syncSpotifyPlaylistsButton?.addEventListener('click', async () => {
-  await syncSpotifyPlaylists();
-});
+syncSpotifyPlaylistsButton?.addEventListener('click', syncSpotifyPlaylists);
 
 async function initializePlaylistCatalog() {
   try {
     const catalog = await loadCatalog();
     renderCatalog(catalog);
+    if (getPlaylistSpotifyToken()) {
+      setPlaylistStatus('Spotify is connected. Tap Sync Spotify Playlists to verify access and import your catalog.');
+    }
   } catch (error) {
     setPlaylistStatus(`Could not open the local catalog: ${error.message}`);
   }
@@ -62,71 +63,81 @@ async function authorizeSpotifyForPlaylists() {
 async function syncSpotifyPlaylists() {
   const token = getPlaylistSpotifyToken();
   if (!token) {
-    setPlaylistStatus('Reconnect Spotify for playlist access, then run the sync again.');
+    setPlaylistStatus('Your Spotify session is missing or expired. Tap Reconnect Spotify for Playlists.');
     return;
   }
 
   setSyncBusy(true);
-  setPlaylistStatus('Loading your Spotify playlists…');
+  setPlaylistStatus('Verifying playlist access with Spotify…');
 
   try {
     const playlistRows = await fetchAllSpotifyPages(
       'https://api.spotify.com/v1/me/playlists?limit=50',
-      token
+      token,
+      'your playlist list'
     );
 
+    setPlaylistStatus(`Playlist access verified. Found ${playlistRows.length} playlists.`);
+
     const playlists = [];
+    const skippedPlaylists = [];
     let importedTrackEntries = 0;
     let unavailableEntries = 0;
     const uniqueTrackIds = new Set();
 
     for (let index = 0; index < playlistRows.length; index += 1) {
       const playlist = playlistRows[index];
-      setPlaylistStatus(`Loading playlist ${index + 1} of ${playlistRows.length}: ${playlist.name}`);
+      const playlistName = playlist.name || 'Untitled playlist';
+      setPlaylistStatus(`Loading playlist ${index + 1} of ${playlistRows.length}: ${playlistName}`);
 
-      const endpoint = playlist.tracks?.href
-        || `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlist.id)}/tracks?limit=100`;
-      const entries = await fetchAllSpotifyPages(endpoint, token);
-      const tracks = [];
+      try {
+        const endpoint = playlist.items?.href
+          || playlist.tracks?.href
+          || `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlist.id)}/items?limit=100`;
+        const entries = await fetchAllSpotifyPages(endpoint, token, `playlist “${playlistName}”`);
+        const tracks = [];
 
-      for (const entry of entries) {
-        const track = entry?.track || entry?.item || entry;
-        if (!track || track.type === 'episode' || track.is_local) {
-          unavailableEntries += 1;
-          continue;
+        for (const entry of entries) {
+          const track = entry?.track || entry?.item || entry;
+          if (!track || track.type === 'episode' || track.is_local) {
+            unavailableEntries += 1;
+            continue;
+          }
+
+          importedTrackEntries += 1;
+          if (track.id) uniqueTrackIds.add(track.id);
+          tracks.push({
+            id: track.id || null,
+            uri: track.uri || null,
+            name: track.name || 'Unknown track',
+            artists: Array.isArray(track.artists)
+              ? track.artists.map((artist) => ({ id: artist.id || null, name: artist.name || 'Unknown artist' }))
+              : [],
+            album: track.album
+              ? { id: track.album.id || null, name: track.album.name || 'Unknown album' }
+              : null,
+            duration_ms: Number(track.duration_ms) || 0,
+            explicit: Boolean(track.explicit),
+            added_at: entry?.added_at || null,
+            added_by: entry?.added_by?.id || null
+          });
         }
 
-        importedTrackEntries += 1;
-        if (track.id) uniqueTrackIds.add(track.id);
-        tracks.push({
-          id: track.id || null,
-          uri: track.uri || null,
-          name: track.name || 'Unknown track',
-          artists: Array.isArray(track.artists)
-            ? track.artists.map((artist) => ({ id: artist.id || null, name: artist.name || 'Unknown artist' }))
-            : [],
-          album: track.album
-            ? { id: track.album.id || null, name: track.album.name || 'Unknown album' }
-            : null,
-          duration_ms: Number(track.duration_ms) || 0,
-          explicit: Boolean(track.explicit),
-          added_at: entry?.added_at || null,
-          added_by: entry?.added_by?.id || null
+        playlists.push({
+          id: playlist.id,
+          name: playlistName,
+          description: playlist.description || '',
+          owner: playlist.owner?.display_name || playlist.owner?.id || 'Unknown owner',
+          collaborative: Boolean(playlist.collaborative),
+          public: playlist.public,
+          snapshot_id: playlist.snapshot_id || null,
+          spotify_url: playlist.external_urls?.spotify || null,
+          image_url: playlist.images?.[0]?.url || null,
+          tracks
         });
+      } catch (error) {
+        skippedPlaylists.push({ name: playlistName, reason: error.message });
       }
-
-      playlists.push({
-        id: playlist.id,
-        name: playlist.name || 'Untitled playlist',
-        description: playlist.description || '',
-        owner: playlist.owner?.display_name || playlist.owner?.id || 'Unknown owner',
-        collaborative: Boolean(playlist.collaborative),
-        public: playlist.public,
-        snapshot_id: playlist.snapshot_id || null,
-        spotify_url: playlist.external_urls?.spotify || null,
-        image_url: playlist.images?.[0]?.url || null,
-        tracks
-      });
     }
 
     const catalog = {
@@ -134,16 +145,23 @@ async function syncSpotifyPlaylists() {
       source: 'spotify',
       synced_at: new Date().toISOString(),
       playlist_count: playlists.length,
+      spotify_playlist_count: playlistRows.length,
+      skipped_playlist_count: skippedPlaylists.length,
       track_entry_count: importedTrackEntries,
       unique_track_count: uniqueTrackIds.size,
       unavailable_entry_count: unavailableEntries,
+      skipped_playlists: skippedPlaylists,
       playlists
     };
 
     await saveCatalog(catalog);
     renderCatalog(catalog);
+
+    const skippedText = skippedPlaylists.length
+      ? ` ${skippedPlaylists.length} playlist${skippedPlaylists.length === 1 ? ' was' : 's were'} skipped because Spotify denied access to those specific items.`
+      : '';
     setPlaylistStatus(
-      `Sync complete: ${catalog.playlist_count} playlists, ${catalog.track_entry_count} track entries, ${catalog.unique_track_count} unique tracks.`
+      `Sync complete: ${catalog.playlist_count} playlists, ${catalog.track_entry_count} track entries, ${catalog.unique_track_count} unique tracks.${skippedText}`
     );
   } catch (error) {
     setPlaylistStatus(`Playlist sync error: ${error.message}`);
@@ -152,7 +170,7 @@ async function syncSpotifyPlaylists() {
   }
 }
 
-async function fetchAllSpotifyPages(initialUrl, token) {
+async function fetchAllSpotifyPages(initialUrl, token, resourceLabel) {
   const items = [];
   let url = initialUrl;
 
@@ -160,19 +178,23 @@ async function fetchAllSpotifyPages(initialUrl, token) {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    const data = await response.json().catch(() => ({}));
 
     if (response.status === 401) {
-      localStorage.removeItem(DJT_SPOTIFY_TOKEN_KEY);
-      localStorage.removeItem(DJT_SPOTIFY_TOKEN_EXPIRES_KEY);
+      clearPlaylistSpotifyToken();
       throw new Error('Your Spotify session expired. Reconnect Spotify and try again.');
     }
 
-    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+      const spotifyMessage = data.error?.message || data.error_description || '';
       if (response.status === 403) {
-        throw new Error('Spotify has not granted playlist access. Tap Reconnect Spotify for Playlists.');
+        throw new Error(
+          spotifyMessage
+            ? `Spotify denied access to ${resourceLabel}: ${spotifyMessage}`
+            : `Spotify denied access to ${resourceLabel}. Reconnect Spotify and try again.`
+        );
       }
-      throw new Error(data.error?.message || `Spotify returned HTTP ${response.status}.`);
+      throw new Error(spotifyMessage || `Spotify returned HTTP ${response.status} while loading ${resourceLabel}.`);
     }
 
     if (Array.isArray(data.items)) items.push(...data.items);
@@ -187,6 +209,11 @@ function getPlaylistSpotifyToken() {
   const expiresAt = Number(localStorage.getItem(DJT_SPOTIFY_TOKEN_EXPIRES_KEY) || 0);
   if (!token || !expiresAt || Date.now() >= expiresAt) return null;
   return token;
+}
+
+function clearPlaylistSpotifyToken() {
+  localStorage.removeItem(DJT_SPOTIFY_TOKEN_KEY);
+  localStorage.removeItem(DJT_SPOTIFY_TOKEN_EXPIRES_KEY);
 }
 
 function getPlaylistRedirectUri() {
@@ -212,7 +239,8 @@ function renderCatalog(catalog) {
   }
 
   const synced = new Date(catalog.synced_at).toLocaleString();
-  playlistCatalogSummary.textContent = `${catalog.playlist_count} playlists • ${catalog.track_entry_count} track entries • ${catalog.unique_track_count} unique tracks • Synced ${synced}`;
+  const skipped = Number(catalog.skipped_playlist_count) || 0;
+  playlistCatalogSummary.textContent = `${catalog.playlist_count} playlists • ${catalog.track_entry_count} track entries • ${catalog.unique_track_count} unique tracks${skipped ? ` • ${skipped} skipped` : ''} • Synced ${synced}`;
   playlistCatalogList.innerHTML = catalog.playlists
     .map((playlist) => `
       <li>
