@@ -14,6 +14,45 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .playlist-sync-panel {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .playlist-sync-panel h3 {
+      margin: 0 0 0.4rem;
+    }
+
+    .playlist-sync-panel p {
+      margin: 0.45rem 0;
+    }
+
+    .playlist-catalog-list {
+      display: grid;
+      gap: 0.45rem;
+      max-height: 18rem;
+      overflow: auto;
+      margin: 0.75rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .playlist-catalog-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: 0.65rem;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .playlist-catalog-list span {
+      white-space: nowrap;
+      opacity: 0.75;
+    }
+  </style>
 </head>
 <body>
   <main class="app-shell">
@@ -21,7 +60,7 @@
       <div class="brand-lockup" aria-label="dJT">
         <img class="brand-icon" src="icon.svg" alt="" />
         <div>
-          <p class="eyebrow">dJT v0.3.1</p>
+          <p class="eyebrow">dJT v0.3.2</p>
           <h1><span class="brand-d">d</span>JT</h1>
         </div>
       </div>
@@ -39,7 +78,7 @@
     </section>
 
     <section class="spotify-panel" aria-labelledby="spotify-title">
-      <h2 id="spotify-title">Spotify Test</h2>
+      <h2 id="spotify-title">Spotify</h2>
       <p>Connect your Spotify Premium account, then play “Saving Grace” by Tom Petty on your active Spotify device.</p>
       <div class="spotify-controls">
         <button id="spotifyLoginButton" type="button">Connect Spotify</button>
@@ -47,6 +86,18 @@
       </div>
       <input id="spotifyClientIdInput" type="hidden" value="00b9c89802ff42b088a25a636c9e9d61" />
       <p id="spotifyStatusText" class="spotify-status">Spotify is not connected.</p>
+
+      <div class="playlist-sync-panel" aria-labelledby="playlist-sync-title">
+        <h3 id="playlist-sync-title">Playlist Catalog</h3>
+        <p>Authorize playlist access once, then sync your Spotify playlists into dJT’s local catalog.</p>
+        <div class="spotify-controls">
+          <button id="playlistAuthorizeButton" type="button">Reconnect Spotify for Playlists</button>
+          <button id="syncSpotifyPlaylistsButton" type="button">Sync Spotify Playlists</button>
+        </div>
+        <p id="playlistSyncStatus" class="spotify-status">Playlist access has not been authorized yet.</p>
+        <p id="playlistCatalogSummary" class="support-message">No playlists have been synced yet.</p>
+        <ul id="playlistCatalogList" class="playlist-catalog-list" aria-label="Synced Spotify playlists"></ul>
+      </div>
     </section>
 
     <section class="result-grid">
@@ -86,5 +137,6 @@
     localStorage.setItem('djt_spotify_client_id', '00b9c89802ff42b088a25a636c9e9d61');
   </script>
   <script src="app.js"></script>
+  <script src="playlist-sync.js"></script>
 </body>
 </html>
